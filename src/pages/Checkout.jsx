@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreditCard, MapPin, Truck, ChevronLeft, Shield, Check } from 'lucide-react';
 import { useCartStore, useAuthStore } from '@/stores';
-import { checkoutService } from '@/services';
+import { checkoutService, orderService } from '@/services';
 import { Layout } from '@/components/layout';
 import { Button, Card, Input } from '@/components/ui';
 import { formatCurrency } from '@/utils';
@@ -40,28 +40,35 @@ export default function CheckoutPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      const checkoutData = {
-        items: items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          price: item.product.price,
-        })),
-        shippingAddress: shippingInfo,
-        total,
-      };
+    const orderData = {
+      items: items.map((item) => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        price: item.product.price,
+      })),
+      shippingAddress: shippingInfo,
+      total,
+    };
 
-      const response = await checkoutService.createCheckoutSession(checkoutData);
+    try {
+      const order = await orderService.createOrder(orderData);
+      const orderId = order?.id || order?._id || order?.orderId || order?.order_id;
+
+      if (!orderId) {
+        throw new Error('Order was created but no order ID was returned');
+      }
+
+      const response = await checkoutService.createCheckoutSession({ order_id: orderId });
       
       if (response.checkoutUrl) {
         window.location.href = response.checkoutUrl;
       } else {
-        // If no Stripe URL, simulate success
         clearCart();
         toast.success('Order placed successfully!');
         navigate('/orders');
       }
     } catch (error) {
+      console.error('Checkout failed:', error);
       toast.error('Checkout failed. Please try again.');
     } finally {
       setIsLoading(false);
